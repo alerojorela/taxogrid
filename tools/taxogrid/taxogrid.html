@@ -1,0 +1,340 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="es">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="author" content="Alejandro Rojo">
+    <title>Treemap parser</title>
+
+
+    <meta http-equiv="Content-Type" content="svg/xml" />
+
+
+    <!-- scripts -->
+    <script src="../../jsexternal/jquery-3.3.1.min.js"></script>
+
+    <!-- My scripts -->
+    <script src="../../js/common.js"></script>
+    <script src="../../js/parserterminal.js"></script>
+    <script src="../../js/taxogrid.js"></script>
+
+
+    <!-- styles -->
+    <link rel="stylesheet" type="text/css" href="../../style/common.css" />
+    <link rel="stylesheet" type="text/css" href="../../style/graphicOutput.css" />
+    <link rel="stylesheet" type="text/css" href="../../style/taxogrid.css">
+
+
+    <!-- Estilos específicos -->
+    <style>
+        /* Variables CSS 
+            :root {	--nvariable:;}
+            var(--nvariable)
+        */
+        :root {
+            --cell-margin: 2px;
+        }
+
+
+        body {
+            min-height: 100vh;
+        }
+
+        #canvas {
+            margin: 30px 0;
+        }
+
+        .taxogram {
+            margin: 15px auto;
+        }
+
+        .terminal>.content {
+            margin: var(--cell-margin) auto;
+            height: calc(100% - 2*var(--cell-margin));
+            width: calc(100% - 2*var(--cell-margin));
+        }
+    </style>
+
+</head>
+
+<body>
+    <header>
+        <div class="license">
+            <div>
+                <a href="https://creativecommons.org/licenses/by-nc/2.0/">
+                    <img class="invert" src="https://creativecommons.org/images/deed/cc_icon_white_x2.png" />
+                    <img class="invert" src="https://creativecommons.org/images/deed/attribution_icon_white_x2.png" />
+                    <img class="invert" src="https://creativecommons.org/images/deed/nc_white_x2.png" />
+                </a>
+                <span>2019 <a href="../../aboutme.html">Alejandro Rojo</a></span>
+            </div>
+            <div>
+                <a href="../../index.html" title="Title">Volver</a> a la página principal
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <header>
+            <h1>Taxonomy grid designer</h1>
+            <p>This app renders a recursive division of a rectangle. It is inspired by
+                <a href="https://en.wikipedia.org/wiki/Treemapping">treemaps</a>,
+                <a href="https://en.wikipedia.org/wiki/Chinese_character_description_language">chinese character
+                    decomposition</a> or
+                <a href="https://en.wikipedia.org/wiki/Metro_(design_language)">Metro</a> minimalist design.</p>
+            <!--
+            <p>Este programa permite diseñar taxogramas, divisiones recursivas de un rectángulo. Permite la interacción
+                con ellas teniendo como unas de sus aplicaciones el diseño de interfaces minimalistas similares a <a
+                    href="https://en.wikipedia.org/wiki/Metro_(design_language)">Metro</a></p>
+                    -->
+            <div>
+                <label for="linkstextbox">Use reserved characters: brackets <strong>[...]</strong> to represent
+                    hierarchy, <strong>spaces</strong> as token separators and quotation marks <strong>"..."</strong> or <strong>«...»</strong> to group
+                    tokens</label>
+                <!--
+                    (Agua Barco (Cabeza Dedo (Estrella Flor Globo Hoja) Isla) Judía)
+                    (A B (C D (E F G H) I) J)
+                    ["A","B",["C","D",["E","F","G","H"],"I"],"J"]
+                -->
+                <textarea id="ARRAYinput">[Agua Barco [Cabeza Dedo [Estrella Flor Globo Hoja] Isla] Judía]</textarea>
+
+                <div class="WarningArea"></div>
+                <select id="ClickBehaviour">
+                    <optgroup label="Cell Action">
+                        <option value='0' selected>Edit</option>
+                        <option value='1'>Select</option>
+                        <option value='2'>Click</option>
+                    </optgroup>
+                </select>
+                <select id="OutputOption">
+                    <optgroup label="Method">
+                        <option value='0' selected>CSS flex</option>
+                        <option value='1'>CSS grid</option>
+                        <!--
+                        <option value='2'>SVG</option>
+                        -->
+                    </optgroup>
+                </select>
+                <input type="button" value="Render" onclick="Run();" />
+                <input type="button" value="Clear" onclick="Clear();" />
+                Margin<input type="number" name="margin" min="0" max="10" value="2" onchange="marginchanged(this);">px
+            </div>
+        </header>
+
+        <div id="canvas"></div>
+
+    </main>
+
+
+    <script src="../../jsexternal/fitty.min.js"></script>
+    <script>
+        // after document is loaded
+        window.onload = function () {
+            var idArray = GetURLParameter("q")
+            console.log(idArray);
+            if (idArray !== undefined) {
+                for (var n = 0; n < idArray.length; n++) {
+                    console.log(n, idArray[n], decodeURI(idArray[n]));
+                }
+
+                $('#ARRAYinput').text(decodeURI(idArray[0])); // p span...
+                Run(decodeURI(idArray[0]));
+            }
+        }
+        var marginchanged = function (obj) {
+            console.log(obj);
+            var html = document.getElementsByTagName('html')[0];
+            html.style.cssText = "--cell-margin: " + obj.value + "px;";
+        }
+
+        var Run = function (rawexpr) {
+            console.log('run()');
+            $('.WarningArea').hide().empty();
+
+            if (rawexpr === undefined) rawexpr = document.getElementById("ARRAYinput").value;
+            var obj = parserterminal.parse(rawexpr);
+            //ParsingNamesubstrings(parsedexpr);
+
+
+            const OutputFormat = document.getElementById("OutputOption").value;
+            if (OutputFormat == 0) {
+                var newElem = render.TaxoGridCSSFlex(obj, renderoptions.square);
+            } else if (OutputFormat == 1) {
+                var newElem = render.TaxoGridCSSGrid(obj, renderoptions.square);
+            } else {
+                var content = RenderTaxoGridSVG(obj, renderoptions.square);
+                var newElem = document.createElement('svg');
+                newElem.appendChild(content);
+            }
+
+
+            document.getElementById("canvas").prepend(newElem);
+
+            Update();
+
+            return;
+            var lg = logograms[str];
+            if (lg === undefined) {
+                $('.WarningArea').show().html('WARNING: Logogram not found');
+                return;
+            }
+
+        }
+
+        var Clear = function () {
+            $("#ARRAYinput").empty();
+        }
+
+        var Update = function () {
+            // Assures a 1:1 square ratio for taxograms
+            const side = '40vh';//'200px' '50vh';
+            $('.taxogram').width(side).height(side);
+            /*
+            var prueba = document.getElementById("canvas").appendChild(document.createElement('div'));
+            prueba.resize(function () {	});
+            */
+
+
+            $(".terminal>.content").click(function (event) {
+                cell_clicked(event);
+            });
+
+
+            // Cambia el color aleatoriamente de cada celda
+            function get_random_color() {
+                var hue = getRandom(140, 160);
+                var saturation = getRandom(0, 100);
+                var luminosity = getRandom(15, 30);
+                return `hsl(${hue}, ${saturation}%, ${luminosity}%)`;
+            }
+
+            var terminals = $('.terminal>.content');
+            for (var n = 0; n < terminals.length; n++) {
+                // if (n % 2 == 0) 
+                terminals[n].style.backgroundColor = get_random_color();
+            }
+
+
+            // Expande el texto a las dimensiones del contenedor
+            fitty('.fittedtext', { minSize: 1 });
+
+        }
+
+
+        /**************************************************************
+         *                   INTERFACE INTERACTION
+         **************************************************************/
+        //#region
+
+        const fourdirection = {
+            down: 0,
+            left: 1,
+            up: 2,
+            right: 3
+        }
+        const ItemClickDirection = function (event) {
+            var $target = $(event.target);
+
+            var cell = $target.parent();
+            var width = cell.width();
+            var height = cell.height();
+
+            var centerX = cell.offset().left + width / 2;
+            var centerY = cell.offset().top + height / 2;
+            // ¿y si no es cuadrado?
+            var anglerect = Math.atan(width / height);
+
+            console.log(centerX, centerY);
+
+            // http://jsfiddle.net/AMsK9/
+            var posX = cell.offset().left, posY = cell.offset().top;
+            var x = event.pageX - posX - width / 2, y = event.pageY - posY - height / 2;
+
+            var angle = Math.atan(y / x);
+            if (x < 0) { angle += Math.PI; }
+            else if (angle < 0) { angle += 2 * Math.PI; }
+
+            var diagonals = [anglerect, Math.PI - anglerect, Math.PI + anglerect, 2 * Math.PI - anglerect]
+            if (angle > diagonals[0] && angle < diagonals[1]) {
+                console.log('downwards');
+                return fourdirection.down;
+            } else if (angle > diagonals[1] && angle < diagonals[2]) {
+                console.log('leftwards');
+                return fourdirection.left;
+            } else if (angle > diagonals[2] && angle < diagonals[3]) {
+                console.log('upwards');
+                return fourdirection.up;
+            } else {
+                console.log('rigthwards');
+                return fourdirection.right;
+            }
+
+            var degrees = angle * 180 / Math.PI;
+            console.log(x, y, angle, degrees);
+        }
+
+        var cell_clicked = function (event) {
+            console.log("clicked_terminal");
+            console.log(event);
+
+            var target = event.target;
+
+            // Get combo selection
+            // var ClickBehaviour = $('#ClickBehaviour').find(":selected").val();
+            var ClickBehaviour = $('#ClickBehaviour').find(":selected").text();
+
+            if (ClickBehaviour == "Edit") {
+                var fourway = ItemClickDirection(event);
+
+                var cell = $(target).parent();
+                var pre = cell.prev();
+                var post = cell.next();
+                // $(selector).nextUntil()
+
+                //console.log(pre, cell, post);
+                console.log(pre);
+                console.log(post);
+
+                if (fourway == fourdirection.left) {
+                    while (!(pre.length == 1 || cell.hasClass("taxogram"))) {
+                        cell = cell.parent();
+                        var pre = cell.prev();
+                    }
+                    if (pre.length == 1) cell.insertBefore(pre);
+
+                } else if (fourway == fourdirection.right) {
+                    while (!(post.length == 1 || cell.hasClass("taxogram"))) {
+                        cell = cell.parent();
+                        var post = cell.next();
+                    }
+                    if (post.length == 1) cell.insertAfter(post);
+
+                } else {
+                    //console.log('no changes');
+                }
+
+
+            } else if (ClickBehaviour == "Select") {
+                // Modifica la clase de un elemento
+                if (target.classList.contains("selected")) {
+                    target.classList.remove("selected");
+                } else {
+                    target.classList.add("selected");
+                }
+
+            } else if (ClickBehaviour == "Click") { // href o según id
+
+            }
+        };
+
+
+//#endregion  
+
+    </script>
+</body>
+<!--
+-->
+
+
+
+</html>
